@@ -1,10 +1,10 @@
 import os, sys, re
-import xml.etree.ElementTree
 from collections import defaultdict
 from lxml import etree
 from datetime import datetime
 from pprint import pprint
 
+'''Main method that tries to extract values for specific doc attributes via XPath'''
 def parse_doc(xml_file):
 	tree = etree.parse(xml_file)
 	try:
@@ -29,8 +29,10 @@ def parse_doc(xml_file):
 		indexterms = [term.strip() for term in indexterms.split(';')]
 	except IndexError:
 		indexterms = None
-	maintext = parse_maintext(tree.xpath('doc//maintext/text()')) 
-# XXX This should be its own function that parses out quotes and the like separately
+	try:
+		maintext = parse_maintext(tree.xpath('doc//maintext/text()')) 
+	except lxml.etree.XPathSyntaxError:
+		maintext = None
 
 	return {
 		'paper': paper, 
@@ -41,19 +43,27 @@ def parse_doc(xml_file):
 		'maintext': maintext 
  }	
 	
+'''This function will return a dictionary of names to a list of quotes from that person'''
+#def get_quotes(maintext):
+#	name_re = re.compile(r'([A-Z][A-Z]+(?=\s[A-Z])(?:\s[A-Z][A-Z]+)+)')
+#	for line in maintext:
+
+'''Main method that describes how to parse the main text of the file.  Returns a dictionary.'''
 def parse_maintext(maintext):
 	# XXX Fix cues, they are bad right now
+	# XXX 
 	cue_re = re.compile(r'(\([A-Z][A-Z]+\))')
-	name_re = re.compile(r'([A-Z][A-Z]+(?=\s[A-Z])(?:\s[A-Z][A-Z]+)+)')
+	#name_re = re.compile(r'([A-Z][A-Z]+(?=\s[A-Z])(?:\s[A-Z][A-Z]+)+)')
+	name_re = re.compile(r'(\b[A-Z][A-Z.-]+\b)+')
 	text = []
 	names = defaultdict(int)
 	cues = defaultdict(int)
 
 	for line in maintext:
 		cue = re.search(cue_re, line)
-		name = re.search(name_re, line)
+		name = re.findall(name_re, line)
 		if name:
-			names[name.group(0)] +=1	
+			names[' '.join(name)] +=1	
 			if cue:
 				cues[cue.group(0)] +=1
 			continue
@@ -62,24 +72,27 @@ def parse_maintext(maintext):
 	result = {
 		#'cues': dict(cues),
 		'names': dict(names),
-		'text': '|'.join(text) 
+		'text': '|'.join(text) # Need to do a better job of grabbing the right text
 	}
 	return result
 
+'''Helper function that applies parsing to all files that end with .xml'''
+def handle_xml_file(ext, dirpath, names):
+	for name in names:
+		if name.endswith(ext):
+			doc = parse_doc(os.path.join(dirpath, name))
+			pprint(doc)
+			sys.exit() # XXX End with processing a single document for now
+
+'''Function that traverses data directory and finds all .xml files.'''
+def process_files(rootdir):
+	ext = '.xml'
+	os.path.walk(rootdir, handle_xml_file, '.xml')
+
 # XXX Refactor into a "run" or "start" method()
 if __name__ == '__main__':
-	for d1 in os.listdir('/data'):
-		curr_d = os.path.join('/data/' + d1)
-		dirs = os.listdir(curr_d)
-		for d2 in dirs:
-			curr_d2 = os.path.join(curr_d, d2)
-			dirs2 = os.listdir(curr_d2)
-			for f in dirs2:
-				fullpath = os.path.join(curr_d2, f)
-				with open(fullpath, 'r') as xml_file:
-					xml_file = os.path.join(curr_d2, fullpath)
-					try:
-						doc = parse_doc(xml_file)
-					except Error as e:
-						print e
-				sys.exit() # Just to get through for testing purposes
+	DATADIR = '/data'
+	process_files(DATADIR)
+
+
+
