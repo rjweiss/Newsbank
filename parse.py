@@ -1,57 +1,41 @@
-import os, sys, re
+import os, sys, re, ast, csv, json
 from collections import defaultdict
 from lxml import etree
 from datetime import datetime
 from pprint import pprint
+from dateutil.parser import parse 
+
+DOC_COUNTS = defaultdict(int)
+SHOW_COUNTS = defaultdict(int)
 
 '''Main method that tries to extract values for specific doc attributes via XPath'''
 def parse_doc(xml_file):
 	tree = etree.parse(xml_file)
-	try:
-		paper = tree.xpath('doc//sourceInfo/paper/text()')[0]
-	except IndexError:
-		paper = None
-	try:
-		show = tree.xpath('doc//sourceInfo/show/text()')[0]
-	except IndexError:
-		show = None
-	try:
-		datestring = tree.xpath('doc//sourceInfo/ymd/text()')[0]
-		date = datetime.strptime(datestring, '%Y%m%d')
-	except IndexError:
-		date = None
-	try:
-		locations = tree.xpath('doc//locations/text()')[0]
-	except IndexError:
-		locations = None
-	try:
-		indexterms = tree.xpath('doc//indexterms/text()')[0]
-		indexterms = [term.strip() for term in indexterms.split(';')]
-	except IndexError:
-		indexterms = None
-	try:
-		maintext = parse_maintext(tree.xpath('doc//maintext/text()')) 
-	except lxml.etree.XPathSyntaxError:
-		maintext = None
+	docs = tree.findall('doc')
+	DOC_COUNTS[len(docs)] += 1
+	for doc in docs:
+		d = get_children(doc)
+		d['sourceInfo'] = get_children(doc.find('sourceInfo'))
+		d['maintext'] = parse_maintext(doc.xpath('maintext/text()'))
+		yield d
 
-	return {
-		'paper': paper, 
-		'show': show,
-		'date': date,
-		'locations': locations,
-		'indexterms': indexterms,
-		'maintext': maintext 
- }	
-	
+'''Helper function to grab a dictionary of the next level's children'''	
+def get_children(node):
+	children = node.getchildren()
+	results = defaultdict(str)
+	for child in children:
+		results[child.tag] = child.text
+	return dict(results)
+
 '''This function will return a dictionary of names to a list of quotes from that person'''
 #def get_quotes(maintext):
 #	name_re = re.compile(r'([A-Z][A-Z]+(?=\s[A-Z])(?:\s[A-Z][A-Z]+)+)')
 #	for line in maintext:
 
 '''Main method that describes how to parse the main text of the file.  Returns a dictionary.'''
+# XXX Main text parsing needs a lot of work
 def parse_maintext(maintext):
 	# XXX Fix cues, they are bad right now
-	# XXX 
 	cue_re = re.compile(r'(\([A-Z][A-Z]+\))')
 	#name_re = re.compile(r'([A-Z][A-Z]+(?=\s[A-Z])(?:\s[A-Z][A-Z]+)+)')
 	name_re = re.compile(r'(\b[A-Z][A-Z.-]+\b)+')
@@ -66,7 +50,7 @@ def parse_maintext(maintext):
 			names[' '.join(name)] +=1	
 			if cue:
 				cues[cue.group(0)] +=1
-			continue
+			#continue
 		text.append(line)
 
 	result = {
@@ -76,23 +60,56 @@ def parse_maintext(maintext):
 	}
 	return result
 
+def parse_date(string):
+	try:
+		parse(string)
+		return True 
+	except ValueError:
+		return False
+		
+'''Helper function that increases the title count for files'''
+def increment_show_counts(doc):
+	try:
+		SHOW_COUNTS[doc['sourceInfo']['paper']] += 1
+	except KeyError:
+		SHOW_COUNTS['null'] += 1
+	
 '''Helper function that applies parsing to all files that end with .xml'''
 def handle_xml_file(ext, dirpath, names):
 	for name in names:
+		#print 'Current time = {t}'.format(t=datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S'))
 		if name.endswith(ext):
+			print 'Processing ' + name
 			doc = parse_doc(os.path.join(dirpath, name))
-			pprint(doc)
-			sys.exit() # XXX End with processing a single document for now
+			if not doc:
+				return False 
+			for d in doc:
+				increment_show_counts(d)				
+	return True			
 
 '''Function that traverses data directory and finds all .xml files.'''
 def process_files(rootdir):
 	ext = '.xml'
 	os.path.walk(rootdir, handle_xml_file, '.xml')
 
+def write_results(outputdir):
+	print 'Writing results to file'
+	if SHOW_COUNTS:
+		with open(os.path.join(outputdir, 'showcounts.json'), 'w') as f:
+			json.dump(dict(SHOW_COUNTS), f)
+
+	if DOC_COUNTS:
+		DOC_COUNTS = {int(k): int(v) for k,v in DOC_COUNTS.items()}
+		with open(os.path.join(outputdir, 'doccounts.json'), 'w') as f:
+			json.dump(dict(DOC_COUNTS), f)
+			
+	print 'Total number of docs: {n}'.format(n=sum(DOC_COUNTS.itervalues()))
+
 # XXX Refactor into a "run" or "start" method()
 if __name__ == '__main__':
 	DATADIR = '/data'
+	RESULTDIR = '/work/results'
 	process_files(DATADIR)
-
+	write_results(RESULTDIR)
 
 
