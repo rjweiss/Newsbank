@@ -10,7 +10,7 @@ channels = defaultdict(int)
 master_by_dmca = defaultdict(int)
 DMCAs = defaultdict(int)
 
-DMCA_re = re.compile('([A-Z]{3}[A-Z]?)')
+DMCA_re = re.compile('([A-Z]{3,4})')
 market_re = re.compile('\((.+)\)')
 channel_re = re.compile('\[(.+)\]')
 
@@ -42,7 +42,7 @@ with open('channel_names.csv') as f:
       
 codes_master = set(code_map.keys())
 codes_newsbank = set(DMCAs.keys())
-overlap = codes_master.intersection(codes_newsbank)
+overlap = set(codes_master.intersection(codes_newsbank))
 #pprint(codes_newsbank)
 
 for k,v in d.items():
@@ -58,3 +58,4 @@ print 'total codes in master list = ' + str(len(codes_master))
 print 'total codes found in newsbank = ' + str(len(codes_newsbank))
 print 'total overlapping codes = ' + str(len(overlap))
 print 'total master codes in newsbank = ' + str(sum(master_by_dmca.values()))
+print 'missing values = ' + str(list(set(codes_master - overlap)))
