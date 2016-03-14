@@ -48,11 +48,13 @@ overlap = codes_master.intersection(codes_newsbank)
 for k,v in d.items():
 	DMCA_found = re.findall(DMCA_re, k)
 	for item in DMCA_found:
-		no_fly  = set(['ABC','CBS','CNN','CNNG','FOX','USA', 'NBC', 'NPR'])
-		if item not in no_fly:
+		no_fly  = set(['ABC','CBS','CNN','CNNG','FOX','USA', 'NBC', 'NPR', 'PBS'])
+		if item in codes_master:
 			master_by_dmca[item] += v
 
 pprint(dict(master_by_dmca))
-print 'total = ' + str(sum(d.values()))
-print 'overlap = ' + str(len(overlap))
-print 'local = ' + str(sum(master_by_dmca.values()))
+print 'total docs = ' + str(sum(d.values()))
+print 'total codes in master list = ' + str(len(codes_master))
+print 'total codes found in newsbank = ' + str(len(codes_newsbank))
+print 'total overlapping codes = ' + str(len(overlap))
+print 'total master codes in newsbank = ' + str(sum(master_by_dmca.values()))
